@@ -1,0 +1,25 @@
+A 10-K form is an annual report required by the U.S. Securities and Exchange Commission (SEC) that gives a comprehensive summary of a company's financial performance. Here are the key sections typically found in a 10-K form:
+
+1. **Business**: Overview of the company’s operations, products, services, and the markets in which it operates.
+
+2. **Risk Factors**: Detailed discussion of the risks that the company faces, which could impact its business, operations, or financial condition.
+
+3. **Selected Financial Data**: Summary of key financial data for the last five years, providing a quick view of the company’s financial trends.
+
+4. **Management's Discussion and Analysis (MD&A)**: Management’s perspective on the financial results, including discussions on the financial condition, results of operations, and any significant changes.
+
+5. **Financial Statements and Supplementary Data**: Comprehensive set of financial statements including the income statement, balance sheet, cash flow statement, and statement of shareholders’ equity, along with notes to the financial statements.
+
+6. **Executive Compensation**: Information about the compensation of the company's top executives, including salary, bonuses, stock options, and other benefits.
+
+7. **Directors, Executive Officers, and Corporate Governance**: Details about the company’s board of directors, executive officers, and corporate governance practices.
+
+8. **Legal Proceedings**: Information on any significant pending legal matters involving the company.
+
+9. **Market for Registrant’s Common Equity, Related Stockholder Matters, and Issuer Purchases of Equity Securities**: Information on the company’s stock, including market price, dividends, and stock repurchase activities.
+
+10. **Exhibits, Financial Statement Schedules, and Reports on Form 8-K**: List of exhibits and financial statement schedules included in the 10-K, along with references to any reports filed on Form 8-K during the fiscal year.
+
+11. **Signatures**: Signatures of the company’s principal executive officer, principal financial officer, controller or principal accounting officer, and at least a majority of the board of directors.
+
+These sections collectively provide a detailed picture of a company’s financial health, business operations, risks, and overall performance.

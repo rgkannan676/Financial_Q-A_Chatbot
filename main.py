@@ -3,11 +3,12 @@ from openai import OpenAI
 import streamlit as st
 from PyPDF2 import PdfReader
 from langchain_openai import OpenAIEmbeddings
-from langchain.text_splitter import CharacterTextSplitter
+from langchain.text_splitter import CharacterTextSplitter, RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain.chains.question_answering import load_qa_chain
 from typing_extensions import Concatenate
 from langchain_openai import ChatOpenAI
+from langchain.prompts import PromptTemplate
 
 PDF_FOLDER = "data"
 VECTOR_FOLDER = "vector"
@@ -16,15 +17,39 @@ client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 LAST_LOADED_ORG = None
 
-def fix_sentence_grammer_and_spelling(query):
+def get_supported_orgs_names():
+    supported_orgs = [f.split("_")[0] for f in os.listdir(VECTOR_FOLDER)]
+    return ", ".join(supported_orgs)
+
+def split_questions_to_multiple(query):
     global client
-    print("quey : ", query)
     response = client.chat.completions.create(
         model=OPEN_AI_MODEL,
         messages=[
             {
                 "role": "system",
-                "content": "You will be provided with statements, and your task is to convert them to standard English."
+                "content": "You will be provided with question, your task is to split it into multiple questions. The answer should be comma-separated string"
+            },
+            {
+                "role": "user",
+                "content": query
+            }
+        ],
+        temperature=0.5,
+        max_tokens=512,
+        top_p=0.5
+    )
+
+    return response.choices[0].message.content
+
+def fix_sentence_grammer_and_spelling(query):
+    global client
+    response = client.chat.completions.create(
+        model=OPEN_AI_MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": "You will be provided with statements, and your task is to convert them to standard English.Don't include any explanations in your responses"
             },
             {
                 "role": "user",
@@ -55,7 +80,7 @@ def get_org_names(query):
         messages=[
             {
                 "role": "system",
-                "content": "You will be provided with statement, find organization names present, return as comma seperated values, return None if no organizations found."
+                "content": "You will be provided with statement, find business organization names present, return as comma seperated values, return None if no organizations found.Don't include any explanations in your responses."
             },
             {
                 "role": "user",
@@ -106,12 +131,17 @@ def pdf_reader_vectorize():
             content = page.extract_text()
             if content:
                 raw_text += content
-        text_splitter = CharacterTextSplitter(
-            separator="\n",
+
+        text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
-            chunk_overlap=200,
-            length_function=len,
-        )
+            chunk_overlap=100,
+            length_function=len)
+        # text_splitter = CharacterTextSplitter(
+        #     separator="\n",
+        #     chunk_size=1000,
+        #     chunk_overlap=200,
+        #     length_function=len,
+        # )
         texts = text_splitter.split_text(raw_text)
         document_vector = FAISS.from_texts(texts, embeddings)
 
@@ -135,6 +165,9 @@ def chat_bot_start_process():
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
+    if "last_used_orgs" not in st.session_state:
+        st.session_state["last_used_orgs"] = None
+
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
@@ -146,34 +179,68 @@ def chat_bot_start_process():
         good_query = str(fix_sentence_grammer_and_spelling(prompt))
         orgs_found = get_org_names(good_query)
         print("Orgs found : ", orgs_found)
-        current_vector = None
+        current_vector = []
         answer=None
         if orgs_found is not None:
             for org in orgs_found:
                 loaded_vector = get_vector_map(org)
                 if loaded_vector is None:
-                    answer = "The details of org " + org + " is not found."
+                    answer = "The details of org " + org + " is not found. I can provide the details of following orgs : " + str(get_supported_orgs_names())
                     st.session_state.messages.append({"role": "assistant", "content": answer})
-                    LAST_LOADED_ORG = org
                 else:
-                    if current_vector is None:
-                        current_vector = loaded_vector
+                    if len(current_vector) == 0:
+                        current_vector = [loaded_vector]
                     else:
-                        current_vector.merge_from(loaded_vector)
+                        current_vector.append(loaded_vector)
 
-        elif LAST_LOADED_ORG is not None:
-            current_vector = get_vector_map(org)
+            if len(current_vector)>0:
+                st.session_state["last_used_orgs"] = orgs_found
+
+        elif st.session_state["last_used_orgs"] is not None:
+            for org in st.session_state["last_used_orgs"]:
+                loaded_vector = get_vector_map(org)
+                if len(current_vector) == 0:
+                    current_vector = [loaded_vector]
+                else:
+                    current_vector.append(loaded_vector)
         else:
-            answer = "Provide Organization name whose details is needed."
+            answer = "Hi, please provide the  question and name of Organization for getting the details."
+            st.session_state["last_used_orgs"] = None
             st.session_state.messages.append({"role": "assistant", "content": answer})
 
-        if current_vector is not None:
-            chain = load_qa_chain(ChatOpenAI(api_key=st.secrets["OPENAI_API_KEY"],model=OPEN_AI_MODEL), chain_type="stuff")
-            docs = current_vector.similarity_search(good_query)
-            print("DOCS: ", docs)
-            answer = chain.run(input_documents=docs, question=good_query)
-            st.session_state.messages.append(
-                {"role": "assistant", "content": answer})
+
+        if len(current_vector) > 0:
+            prompt = PromptTemplate.from_template(
+                """
+                Use the following pieces of context to answer the question at the end. If you 
+                don't know the answer, just say that you don't know, don't try to make up an 
+                answer.
+
+                {context}
+
+                Question: {question}
+                Helpful Answer:
+                """
+            )
+            chain = load_qa_chain(ChatOpenAI(api_key=st.secrets["OPENAI_API_KEY"],model=OPEN_AI_MODEL), chain_type="stuff", prompt=prompt)
+            docs = []
+            print("Good query = : ", good_query)
+            if len(current_vector)>1:
+                adjusted_query = split_questions_to_multiple(good_query)
+            else:
+                adjusted_query = good_query
+            print("Updated query = ", adjusted_query)
+            for selected_vector in current_vector:
+                current_docs = selected_vector.similarity_search(adjusted_query)
+                print("##current_docs length : ", len(current_docs))
+                docs.extend(current_docs)
+                print("##docs length : ", len(docs))
+            if len(docs)>0:
+                answer = chain.run(input_documents=docs, question=adjusted_query)
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": answer})
+            else:
+                answer = "Sorry, Cannot find the answer."
 
         with st.chat_message("assistant"):
             st.markdown(answer)
