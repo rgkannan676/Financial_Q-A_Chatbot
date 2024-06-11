@@ -9,6 +9,7 @@ from langchain.chains.question_answering import load_qa_chain
 from typing_extensions import Concatenate
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
+from langchain.docstore.document import Document
 
 PDF_FOLDER = "data"
 VECTOR_FOLDER = "vector"
@@ -22,7 +23,7 @@ def get_supported_orgs_names():
     return ", ".join(supported_orgs)
 
 def get_create_context_from_chat(chat_data):
-    chat_text =""
+    chat_text ="chat history : "
     for chat in chat_data:
         chat_text += chat["role"] + ":" + chat["content"] + " "
     if len(chat_text) > 1000: #Set only 1000 characters
@@ -38,7 +39,7 @@ def split_questions_to_multiple(query):
         messages=[
             {
                 "role": "system",
-                "content": "You will be provided with question, your task is to split it into multiple questions. The answer should be comma-separated string"
+                "content": "You will be provided with a question, your task is to split it into multiple sub-questions. The answer should be comma-separated text"
             },
             {
                 "role": "user",
@@ -50,7 +51,7 @@ def split_questions_to_multiple(query):
         top_p=0.5
     )
 
-    return response.choices[0].message.content
+    return response.choices[0].message.content.replace("\n",",")
 
 def fix_sentence_grammer_and_spelling(query):
     global client
@@ -190,6 +191,7 @@ def chat_bot_start_process():
         orgs_found = get_org_names(good_query)
         print("Orgs found : ", orgs_found)
         current_vector = []
+        current_org=[]
         answer=None
         if orgs_found is not None:
             for org in orgs_found:
@@ -198,10 +200,8 @@ def chat_bot_start_process():
                     answer = "The details of org " + org + " is not found. I can provide the details of following orgs : " + str(get_supported_orgs_names())
                     st.session_state.messages.append({"role": "assistant", "content": answer})
                 else:
-                    if len(current_vector) == 0:
-                        current_vector = [loaded_vector]
-                    else:
-                        current_vector.append(loaded_vector)
+                    current_vector.append(loaded_vector)
+                    current_org.append(org)
 
             if len(current_vector)>0:
                 st.session_state["last_used_orgs"] = orgs_found
@@ -209,12 +209,10 @@ def chat_bot_start_process():
         elif st.session_state["last_used_orgs"] is not None:
             for org in st.session_state["last_used_orgs"]:
                 loaded_vector = get_vector_map(org)
-                if len(current_vector) == 0:
-                    current_vector = [loaded_vector]
-                else:
-                    current_vector.append(loaded_vector)
+                current_vector.append(loaded_vector)
+                current_org.append(org)
         else:
-            answer = "Hi, please provide the  question and name of Organization for getting the details."
+            answer = "Hi, please provide the  question and name of Organization for getting the details. I can provide the details of following orgs : " + str(get_supported_orgs_names())
             st.session_state["last_used_orgs"] = None
             st.session_state.messages.append({"role": "assistant", "content": answer})
 
@@ -224,7 +222,7 @@ def chat_bot_start_process():
                 """
                 Use the following pieces of context to answer the question at the end. If you 
                 don't know the answer, just say that you don't know, don't try to make up an 
-                answer.
+                answer. Prove answers in formatted english.
 
                 {context}
 
@@ -232,7 +230,7 @@ def chat_bot_start_process():
                 Helpful Answer:
                 """
             )
-            chain = load_qa_chain(ChatOpenAI(api_key=st.secrets["OPENAI_API_KEY"],model=OPEN_AI_MODEL), chain_type="stuff", prompt=prompt) #, streaming=True
+            chain = load_qa_chain(ChatOpenAI(api_key=st.secrets["OPENAI_API_KEY"],model=OPEN_AI_MODEL,temperature=0), chain_type="stuff", prompt=prompt) #, streaming=True
             docs = []
             print("Good query = : ", good_query)
             if len(current_vector)>1:
@@ -240,20 +238,21 @@ def chat_bot_start_process():
             else:
                 adjusted_query = good_query
             print("Updated query = ", adjusted_query)
-            for selected_vector in current_vector:
-                if len(docs)<=0: # Add chat history
-                    doc = get_create_context_from_chat(st.session_state.messages)
-                    print("##docs history length : ", len(doc))
-
-                current_docs = selected_vector.similarity_search(adjusted_query)
-                print("##current_docs length : ", len(current_docs))
-                docs.extend(current_docs)
-                print("##docs length : ", len(docs))
+            for pos,selected_vector in enumerate(current_vector):
+                current_docs = selected_vector.similarity_search(adjusted_query) #selected_vector.similarity_search_with_score(adjusted_query)#
+                for doc_nm in range(0,len(current_docs)):
+                    current_docs[doc_nm].page_content = "Details of " + current_org[pos] + ":" + current_docs[0].page_content
+                if len(current_docs) > 2:
+                    docs.extend(current_docs[:2])
+                else:
+                    docs.extend(current_docs)
+                print("len: ", len(docs))
             if len(docs)>0:
+                print("DOCS are ", docs)
                 answer = chain.run(input_documents=docs, question=adjusted_query)
-                #answer = st.write_stream(chain({"input_documents": docs, "question": adjusted_query}, return_only_outputs=True)['output_text'])
-                st.session_state.messages.append(
-                    {"role": "assistant", "content": answer})
+                st.session_state.messages.append({"role": "assistant", "content": answer})
+                docs.extend([Document(page_content=get_create_context_from_chat(st.session_state.messages))])
+                print("##docs history length : ", len(docs))
             else:
                 answer = "Sorry, Cannot find the answer."
 
