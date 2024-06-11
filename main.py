@@ -222,7 +222,7 @@ def chat_bot_start_process():
                 """
                 Use the following pieces of context to answer the question at the end. If you 
                 don't know the answer, just say that you don't know, don't try to make up an 
-                answer. Prove answers in formatted english.
+                answer.
 
                 {context}
 
@@ -230,7 +230,7 @@ def chat_bot_start_process():
                 Helpful Answer:
                 """
             )
-            chain = load_qa_chain(ChatOpenAI(api_key=st.secrets["OPENAI_API_KEY"],model=OPEN_AI_MODEL,temperature=0), chain_type="stuff", prompt=prompt) #, streaming=True
+            chain =  load_qa_chain(ChatOpenAI(api_key=st.secrets["OPENAI_API_KEY"],model=OPEN_AI_MODEL,temperature=0), chain_type="stuff", prompt=prompt) #, streaming=True
             docs = []
             print("Good query = : ", good_query)
             if len(current_vector)>1:
@@ -242,8 +242,11 @@ def chat_bot_start_process():
                 current_docs = selected_vector.similarity_search(adjusted_query) #selected_vector.similarity_search_with_score(adjusted_query)#
                 for doc_nm in range(0,len(current_docs)):
                     current_docs[doc_nm].page_content = "Details of " + current_org[pos] + ":" + current_docs[0].page_content
-                if len(current_docs) > 2:
-                    docs.extend(current_docs[:2])
+                if len(current_vector)>1:
+                    if len(current_docs) > 2:
+                        docs.extend(current_docs[:2])
+                    else:
+                        docs.extend(current_docs)
                 else:
                     docs.extend(current_docs)
                 print("len: ", len(docs))
