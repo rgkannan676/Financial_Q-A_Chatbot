@@ -21,6 +21,16 @@ def get_supported_orgs_names():
     supported_orgs = [f.split("_")[0] for f in os.listdir(VECTOR_FOLDER)]
     return ", ".join(supported_orgs)
 
+def get_create_context_from_chat(chat_data):
+    chat_text =""
+    for chat in chat_data:
+        chat_text += chat["role"] + ":" + chat["content"] + " "
+    if len(chat_text) > 1000: #Set only 1000 characters
+        chat_text = chat_text[-1000:]
+    print("chat_text : " , chat_text)
+    return chat_text
+
+
 def split_questions_to_multiple(query):
     global client
     response = client.chat.completions.create(
@@ -173,10 +183,10 @@ def chat_bot_start_process():
             st.markdown(message["content"])
 
     if prompt := st.chat_input("What is up?"):
-        st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
         good_query = str(fix_sentence_grammer_and_spelling(prompt))
+        st.session_state.messages.append({"role": "user", "content": good_query})
         orgs_found = get_org_names(good_query)
         print("Orgs found : ", orgs_found)
         current_vector = []
@@ -222,7 +232,7 @@ def chat_bot_start_process():
                 Helpful Answer:
                 """
             )
-            chain = load_qa_chain(ChatOpenAI(api_key=st.secrets["OPENAI_API_KEY"],model=OPEN_AI_MODEL), chain_type="stuff", prompt=prompt)
+            chain = load_qa_chain(ChatOpenAI(api_key=st.secrets["OPENAI_API_KEY"],model=OPEN_AI_MODEL), chain_type="stuff", prompt=prompt) #, streaming=True
             docs = []
             print("Good query = : ", good_query)
             if len(current_vector)>1:
@@ -231,12 +241,17 @@ def chat_bot_start_process():
                 adjusted_query = good_query
             print("Updated query = ", adjusted_query)
             for selected_vector in current_vector:
+                if len(docs)<=0: # Add chat history
+                    doc = get_create_context_from_chat(st.session_state.messages)
+                    print("##docs history length : ", len(doc))
+
                 current_docs = selected_vector.similarity_search(adjusted_query)
                 print("##current_docs length : ", len(current_docs))
                 docs.extend(current_docs)
                 print("##docs length : ", len(docs))
             if len(docs)>0:
                 answer = chain.run(input_documents=docs, question=adjusted_query)
+                #answer = st.write_stream(chain({"input_documents": docs, "question": adjusted_query}, return_only_outputs=True)['output_text'])
                 st.session_state.messages.append(
                     {"role": "assistant", "content": answer})
             else:
