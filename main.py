@@ -10,6 +10,8 @@ from typing_extensions import Concatenate
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
 from langchain.docstore.document import Document
+from llama_parse import LlamaParse
+import re
 
 PDF_FOLDER = "data"
 VECTOR_FOLDER = "vector"
@@ -133,27 +135,33 @@ def pdf_reader_vectorize():
     embeddings = OpenAIEmbeddings(api_key=st.secrets["OPENAI_API_KEY"])
     pdf_files = pdf_not_processed() #[f for f in os.listdir(PDF_FOLDER) if f.endswith(".pdf")]
     print(pdf_files)
+    parser = LlamaParse(api_key=st.secrets["LLAMA_API_KEY"],result_type="markdown")
     for pdf in pdf_files:
         pdf_path = os.path.join(PDF_FOLDER,pdf)
         print("processing :", pdf_path)
-        pdfreader = PdfReader(pdf_path)
-        raw_text=""
-        for page in pdfreader.pages:
-            content = page.extract_text()
-            if content:
-                raw_text += content
 
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=100,
-            length_function=len)
+        markdown_text = parser.load_data(pdf_path)[0].text
+
+        # pdfreader = PdfReader(pdf_path)
+        # raw_text=""
+        # for page in pdfreader.pages:
+        #     content = page.extract_text()
+        #     if content:
+        #         raw_text += content
         # text_splitter = CharacterTextSplitter(
         #     separator="\n",
         #     chunk_size=1000,
         #     chunk_overlap=200,
         #     length_function=len,
         # )
-        texts = text_splitter.split_text(raw_text)
+
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
+            length_function=len)
+
+
+        texts = text_splitter.split_text(markdown_text)
         document_vector = FAISS.from_texts(texts, embeddings)
 
         document_vector_path = os.path.join(VECTOR_FOLDER,pdf.replace(".pdf",""))
@@ -222,7 +230,7 @@ def chat_bot_start_process():
                 """
                 Use the following pieces of context to answer the question at the end. If you 
                 don't know the answer, just say that you don't know, don't try to make up an 
-                answer.
+                answer. The answer should be formatted correctly.
 
                 {context}
 
@@ -234,33 +242,39 @@ def chat_bot_start_process():
             docs = []
             print("Good query = : ", good_query)
             if len(current_vector)>1:
-                adjusted_query = split_questions_to_multiple(good_query)
+                #adjusted_query = split_questions_to_multiple(good_query)
+                adjusted_query = good_query
             else:
                 adjusted_query = good_query
             print("Updated query = ", adjusted_query)
             for pos,selected_vector in enumerate(current_vector):
                 current_docs = selected_vector.similarity_search(adjusted_query) #selected_vector.similarity_search_with_score(adjusted_query)#
-                for doc_nm in range(0,len(current_docs)):
-                    current_docs[doc_nm].page_content = "Details of " + current_org[pos] + ":" + current_docs[0].page_content
                 if len(current_vector)>1:
-                    if len(current_docs) > 2:
-                        docs.extend(current_docs[:2])
+                    if len(current_docs) > 2: #If multiple org details is needed.
+                        for doc_nm in range(0, len(current_docs)):
+                            current_docs[doc_nm].page_content = "Details of " + current_org[pos] + ":" + current_docs[doc_nm].page_content
+                        docs.extend(current_docs[:3])
                     else:
                         docs.extend(current_docs)
                 else:
                     docs.extend(current_docs)
                 print("len: ", len(docs))
             if len(docs)>0:
-                print("DOCS are ", docs)
-                answer = chain.run(input_documents=docs, question=adjusted_query)
-                st.session_state.messages.append({"role": "assistant", "content": answer})
                 docs.extend([Document(page_content=get_create_context_from_chat(st.session_state.messages))])
+
+                print("DOCS are ", docs)
                 print("##docs history length : ", len(docs))
+
+                answer = chain.run(input_documents=docs, question=adjusted_query)
+                print("original answer : ", answer)
+                #answer = fix_sentence_grammer_and_spelling(answer)
+                answer =  answer.replace("$","\\$")
+                st.session_state.messages.append({"role": "assistant", "content": answer})
             else:
                 answer = "Sorry, Cannot find the answer."
 
         with st.chat_message("assistant"):
-            st.markdown(answer)
+            st.write(answer)
 
 
 
