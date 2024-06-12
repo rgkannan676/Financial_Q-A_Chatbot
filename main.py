@@ -1,7 +1,6 @@
 import os
 from openai import OpenAI
 import streamlit as st
-from PyPDF2 import PdfReader
 from langchain_openai import OpenAIEmbeddings
 from langchain.text_splitter import CharacterTextSplitter, RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
@@ -11,7 +10,6 @@ from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
 from langchain.docstore.document import Document
 from llama_parse import LlamaParse
-import re
 
 ### Parameter Data ###
 PDF_FOLDER = "data"
