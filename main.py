@@ -13,28 +13,43 @@ from langchain.docstore.document import Document
 from llama_parse import LlamaParse
 import re
 
+### Parameter Data ###
 PDF_FOLDER = "data"
 VECTOR_FOLDER = "vector"
 OPEN_AI_MODEL = "gpt-3.5-turbo"
+######################
+
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-LAST_LOADED_ORG = None
 
 def get_supported_orgs_names():
+    """
+    Provide the supported organizations list
+    :return: String of comma seperated values.
+    """
     supported_orgs = [f.split("_")[0] for f in os.listdir(VECTOR_FOLDER)]
     return ", ".join(supported_orgs)
 
 def get_create_context_from_chat(chat_data):
+    """
+    Provide the chat history with last 1000 characters
+    :chat_data: Input list of streamlit chat sessions
+    :return: String of 1000 character chat history.
+    """
     chat_text ="chat history : "
     for chat in chat_data:
         chat_text += chat["role"] + ":" + chat["content"] + " "
     if len(chat_text) > 1000: #Set only 1000 characters
         chat_text = chat_text[-1000:]
-    print("chat_text : " , chat_text)
     return chat_text
 
 
 def split_questions_to_multiple(query):
+    """
+    Split a question into multiple sub-questions
+    :query: Input question
+    :return: String of multiple questions
+    """
     global client
     response = client.chat.completions.create(
         model=OPEN_AI_MODEL,
@@ -56,6 +71,11 @@ def split_questions_to_multiple(query):
     return response.choices[0].message.content.replace("\n",",")
 
 def fix_sentence_grammer_and_spelling(query):
+    """
+    Fix the grammar and spelling of input query
+    :query: Input question
+    :return: Gramattically fixed string.
+    """
     global client
     response = client.chat.completions.create(
         model=OPEN_AI_MODEL,
@@ -77,17 +97,19 @@ def fix_sentence_grammer_and_spelling(query):
 
 
 def create_folder(folder_name):
+    """
+    Create a folder
+    :folder_name: Folder path to create
+    """
     os.makedirs(folder_name, exist_ok=True)
 
 def get_org_names(query):
-    # global nlp
-    # doc = nlp(query)
-    # org_list = [x.text for x in doc.ents if x.label_ == "ORG"]
-    # for ent in doc.ents:
-    #     print(ent.text, ent.start_char, ent.end_char, ent.label_)
-
+    """
+    Get the organizations name in a string
+    :query: Input question string
+    :return: List of organizations
+    """
     global client
-    print("quey : ", query)
     response = client.chat.completions.create(
         model=OPEN_AI_MODEL,
         messages=[
@@ -113,6 +135,10 @@ def get_org_names(query):
 
 
 def pdf_not_processed():
+    """
+    Get the list of pdf's that are not converted to vector.
+    :return: List of pdf that need to be converted.
+    """
     pdf_files = [f.replace(".pdf","") for f in os.listdir(PDF_FOLDER) if f.endswith(".pdf")]
     vector_folder = [f for f in os.listdir(VECTOR_FOLDER)]
     remaining_pdf = [f+".pdf" for f in list(set(pdf_files) - set(vector_folder))]
@@ -120,46 +146,35 @@ def pdf_not_processed():
 
 
 def get_vector_map(organization):
-    print("Loading vector to Map")
+    """
+    Get the vector map of an organization.
+    :organization: Organization name whose vector map is needed
+    :return: Vector of the organization.
+    """
     embeddings = OpenAIEmbeddings(api_key=st.secrets["OPENAI_API_KEY"])
     vector_folders = [f for f in os.listdir(VECTOR_FOLDER)]
     for fldr in vector_folders:
         if organization.upper() in fldr.split("_")[0].upper():
             current_vector = FAISS.load_local(os.path.join(VECTOR_FOLDER,fldr), embeddings,allow_dangerous_deserialization=True)
-            print("Loaded vector for ", fldr.split("_")[0])
             return current_vector
     return None
 
 
 def pdf_reader_vectorize():
+    """
+    Convert a pdf to vector embedding and save the vector. Llama parser is used to extract text.
+    Use FAISS create vector db using OPENAI embedding data.
+    """
     embeddings = OpenAIEmbeddings(api_key=st.secrets["OPENAI_API_KEY"])
     pdf_files = pdf_not_processed() #[f for f in os.listdir(PDF_FOLDER) if f.endswith(".pdf")]
-    print(pdf_files)
     parser = LlamaParse(api_key=st.secrets["LLAMA_API_KEY"],result_type="markdown")
     for pdf in pdf_files:
         pdf_path = os.path.join(PDF_FOLDER,pdf)
-        print("processing :", pdf_path)
-
         markdown_text = parser.load_data(pdf_path)[0].text
-
-        # pdfreader = PdfReader(pdf_path)
-        # raw_text=""
-        # for page in pdfreader.pages:
-        #     content = page.extract_text()
-        #     if content:
-        #         raw_text += content
-        # text_splitter = CharacterTextSplitter(
-        #     separator="\n",
-        #     chunk_size=1000,
-        #     chunk_overlap=200,
-        #     length_function=len,
-        # )
-
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
             chunk_overlap=200,
             length_function=len)
-
 
         texts = text_splitter.split_text(markdown_text)
         document_vector = FAISS.from_texts(texts, embeddings)
@@ -167,15 +182,12 @@ def pdf_reader_vectorize():
         document_vector_path = os.path.join(VECTOR_FOLDER,pdf.replace(".pdf",""))
         document_vector.save_local(document_vector_path)
 
-        print("Saved vector to :", document_vector_path)
-
-
-
 
 def chat_bot_start_process():
-
-    global client,LAST_LOADED_ORG
-    
+    """
+    Start the streamlit chat. Get query from user and output the answer.
+    """
+    global client
     st.title("Q&A chatbot on financial reports")
 
     if "openai_model" not in st.session_state:
@@ -197,7 +209,6 @@ def chat_bot_start_process():
         good_query = str(fix_sentence_grammer_and_spelling(prompt))
         st.session_state.messages.append({"role": "user", "content": good_query})
         orgs_found = get_org_names(good_query)
-        print("Orgs found : ", orgs_found)
         current_vector = []
         current_org=[]
         answer=None
@@ -240,13 +251,13 @@ def chat_bot_start_process():
             )
             chain =  load_qa_chain(ChatOpenAI(api_key=st.secrets["OPENAI_API_KEY"],model=OPEN_AI_MODEL,temperature=0), chain_type="stuff", prompt=prompt) #, streaming=True
             docs = []
-            print("Good query = : ", good_query)
-            if len(current_vector)>1:
-                #adjusted_query = split_questions_to_multiple(good_query)
-                adjusted_query = good_query
-            else:
-                adjusted_query = good_query
-            print("Updated query = ", adjusted_query)
+            # if len(current_vector)>1:
+            #     #adjusted_query = split_questions_to_multiple(good_query)
+            #     adjusted_query = good_query
+            # else:
+            #     adjusted_query = good_query
+            adjusted_query = good_query
+
             for pos,selected_vector in enumerate(current_vector):
                 current_docs = selected_vector.similarity_search(adjusted_query) #selected_vector.similarity_search_with_score(adjusted_query)#
                 if len(current_vector)>1:
@@ -258,15 +269,9 @@ def chat_bot_start_process():
                         docs.extend(current_docs)
                 else:
                     docs.extend(current_docs)
-                print("len: ", len(docs))
             if len(docs)>0:
                 docs.extend([Document(page_content=get_create_context_from_chat(st.session_state.messages))])
-
-                print("DOCS are ", docs)
-                print("##docs history length : ", len(docs))
-
                 answer = chain.run(input_documents=docs, question=adjusted_query)
-                print("original answer : ", answer)
                 #answer = fix_sentence_grammer_and_spelling(answer)
                 answer =  answer.replace("$","\\$")
                 st.session_state.messages.append({"role": "assistant", "content": answer})
@@ -278,30 +283,14 @@ def chat_bot_start_process():
 
 
 
-        # with st.chat_message("assistant"):
-        #     stream = client.chat.completions.create(
-        #         model=st.session_state["openai_model"],
-        #         messages=[
-        #             {"role": m["role"], "content": m["content"]}
-        #             for m in st.session_state.messages
-        #         ],
-        #         stream=True,
-        #     )
-        #     response = st.write_stream(stream)
-        # st.session_state.messages.append({"role": "assistant", "content": response})
-
-
-
 if __name__ == "__main__":
-    print("Start Processing")
     create_folder(VECTOR_FOLDER)
 
     pdf_number = len([f for f in os.listdir(PDF_FOLDER) if f.endswith(".pdf")])
     vector_number =len([f for f in os.listdir(VECTOR_FOLDER)])
+
     if pdf_number!= vector_number:
         print("Start vectorizing")
         pdf_reader_vectorize()
-    else:
-        print("All documents already vectorized")
-
+        
     chat_bot_start_process()
