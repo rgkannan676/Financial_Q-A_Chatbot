@@ -206,7 +206,7 @@ def chat_bot_start_process():
     Start the streamlit chat. Get query from user and output the answer.
     """
     global client
-    st.title("Q&A chatbot on financial reports")
+    st.title("Financial Report Analyser")
 
     if "openai_model" not in st.session_state:
         st.session_state["openai_model"] = OPEN_AI_MODEL
