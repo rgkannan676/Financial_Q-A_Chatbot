@@ -80,7 +80,7 @@ def fix_sentence_grammer_and_spelling(query):
         messages=[
             {
                 "role": "system",
-                "content": "You will be provided with statements, and your task is to convert them to standard English.Don't include any explanations in your responses"
+                "content": "You will be provided with statements, and your task is to convert them to standard English.Do not give me any information about procedures and service features that are not mentioned in the PROVIDED CONTEXT."
             },
             {
                 "role": "user",
@@ -113,7 +113,7 @@ def get_org_names(query):
         messages=[
             {
                 "role": "system",
-                "content": "You will be provided with statement, find business organization names present, return as comma seperated values, return None if no organizations found.Don't include any explanations in your responses."
+                "content": "You will be provided with statement, find business organization names present, return as comma seperated values, return None if no organizations found.Do not give me any information about procedures and service features that are not mentioned in the PROVIDED CONTEXT."
             },
             {
                 "role": "user",
@@ -205,17 +205,18 @@ def chat_bot_start_process():
         with st.chat_message("user"):
             st.markdown(prompt)
         good_query = str(fix_sentence_grammer_and_spelling(prompt))
-        st.session_state.messages.append({"role": "user", "content": good_query})
+        st.session_state.messages.append({"role": "user", "content": prompt})
         orgs_found = get_org_names(good_query)
         current_vector = []
         current_org=[]
         answer=None
         if orgs_found is not None:
             for org in orgs_found:
+                if len(org)>20:
+                    continue
                 loaded_vector = get_vector_map(org)
                 if loaded_vector is None:
                     answer = "The details of org " + org + " is not found. I can provide the details of following orgs : " + str(get_supported_orgs_names())
-                    st.session_state.messages.append({"role": "assistant", "content": answer})
                 else:
                     current_vector.append(loaded_vector)
                     current_org.append(org)
@@ -231,8 +232,6 @@ def chat_bot_start_process():
         else:
             answer = "Hi, please provide the  question and name of Organization for getting the details. I can provide the details of following orgs : " + str(get_supported_orgs_names())
             st.session_state["last_used_orgs"] = None
-            st.session_state.messages.append({"role": "assistant", "content": answer})
-
 
         if len(current_vector) > 0:
             prompt = PromptTemplate.from_template(
@@ -257,7 +256,9 @@ def chat_bot_start_process():
             adjusted_query = good_query
 
             for pos,selected_vector in enumerate(current_vector):
-                current_docs = selected_vector.similarity_search(adjusted_query) #selected_vector.similarity_search_with_score(adjusted_query)#
+                current_docs=[]
+                if adjusted_query is not None and selected_vector is not None:
+                    current_docs = selected_vector.similarity_search(adjusted_query) #selected_vector.similarity_search_with_score(adjusted_query)#
                 if len(current_vector)>1:
                     if len(current_docs) > 2: #If multiple org details is needed.
                         for doc_nm in range(0, len(current_docs)):
@@ -272,11 +273,13 @@ def chat_bot_start_process():
                 answer = chain.run(input_documents=docs, question=adjusted_query)
                 #answer = fix_sentence_grammer_and_spelling(answer)
                 answer =  answer.replace("$","\\$")
-                st.session_state.messages.append({"role": "assistant", "content": answer})
             else:
                 answer = "Sorry, Cannot find the answer."
 
         with st.chat_message("assistant"):
+            if answer is None:
+                answer= "Can you please rephrase the question? I can provide the details of following orgs : " + str(get_supported_orgs_names())
+            st.session_state.messages.append({"role": "assistant", "content": answer})
             st.write(answer)
 
 
