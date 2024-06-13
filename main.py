@@ -2,7 +2,7 @@ import os
 from openai import OpenAI
 import streamlit as st
 from langchain_openai import OpenAIEmbeddings
-from langchain.text_splitter import CharacterTextSplitter, RecursiveCharacterTextSplitter
+from langchain.text_splitter import CharacterTextSplitter, RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain.chains.question_answering import load_qa_chain
 from typing_extensions import Concatenate
@@ -16,6 +16,7 @@ PDF_FOLDER = "data"
 VECTOR_FOLDER = "vector"
 OPEN_AI_MODEL = "gpt-3.5-turbo"
 ######################
+Supported_Orgs = ['Amazon','Apple','CitiGroup', 'FedEx', 'Ford','Google', 'Microsoft', 'Pepsi', 'Tesla','Walmart']
 
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
@@ -113,8 +114,7 @@ def get_org_names(query):
         messages=[
             {
                 "role": "system",
-                "content": "You will be provided with statement, find business organization names present, return as comma seperated values, return None if no organizations found.Do not give me any information about procedures and service features that are not mentioned in the PROVIDED CONTEXT."
-            },
+                "content": "You will be provided with statement, perform NER and find business organization names present, return as comma seperated values, return None if no organizations found. " },
             {
                 "role": "user",
                 "content": query
@@ -128,7 +128,25 @@ def get_org_names(query):
     if found_orgs == "None":
         return None
     else:
-        return [f.strip() for f in found_orgs.split(",")]
+        found_org_name=[]
+        orgs_splitted = found_orgs.split(",")
+        for org_chk in orgs_splitted:
+            found_match =False
+            for original_org in Supported_Orgs:
+                if original_org.upper() in org_chk.replace(" ","").upper():
+                    found_org_name.append(original_org)
+                    found_match = True
+                    break
+            if not found_match:
+                found_org_name.append(org_chk)
+
+        if len(found_org_name) > 0:
+            return list(set(found_org_name))
+        else:
+            return None
+
+
+        return [f.strip().replace(" ","") for f in found_orgs.split(",")]
 
 
 
@@ -169,12 +187,14 @@ def pdf_reader_vectorize():
     for pdf in pdf_files:
         pdf_path = os.path.join(PDF_FOLDER,pdf)
         markdown_text = parser.load_data(pdf_path)[0].text
+
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
             chunk_overlap=200,
             length_function=len)
 
         texts = text_splitter.split_text(markdown_text)
+        markdown_text
         document_vector = FAISS.from_texts(texts, embeddings)
 
         document_vector_path = os.path.join(VECTOR_FOLDER,pdf.replace(".pdf",""))
@@ -263,7 +283,7 @@ def chat_bot_start_process():
                     if len(current_docs) > 2: #If multiple org details is needed.
                         for doc_nm in range(0, len(current_docs)):
                             current_docs[doc_nm].page_content = "Details of " + current_org[pos] + ":" + current_docs[doc_nm].page_content
-                        docs.extend(current_docs[:3])
+                        docs.extend(current_docs)
                     else:
                         docs.extend(current_docs)
                 else:
