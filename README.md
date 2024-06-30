@@ -16,7 +16,7 @@ The RAG (Retrieval-Augmented Generation) approach is used. Data source (PDF) is 
 - FAISS(Facebook AI Similarity Search) : For creating vector stores and checking similarity.
 - LangChain - For various extraction, retrieval, and generative utilities.
 
-## Steps to run ##
+## Steps To Run ##
 - Open Anaconda prompt
 - Install the modules in requirements.txt
 - Add api keys in .streamlit/secrets.toml
