@@ -15,8 +15,8 @@ from llama_parse import LlamaParse
 PDF_FOLDER = "data"
 VECTOR_FOLDER = "vector"
 OPEN_AI_MODEL = "gpt-3.5-turbo"
-######################
 Supported_Orgs = ['Amazon','Apple','CitiGroup', 'FedEx', 'Ford','Google', 'Microsoft', 'Pepsi', 'Tesla','Walmart']
+######################
 
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
