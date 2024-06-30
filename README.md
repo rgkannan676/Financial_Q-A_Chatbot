@@ -6,8 +6,8 @@ The RAG (Retrieval-Augmented Generation) approach is used. Data source (PDF) is 
 
 ## Data Used ##
 - 10-K Report, a comprehensive document filed annually by public companies to detail their financial performance for year 2023.
-- Currently contains data of 10 orgs - 'Amazon','Apple','CitiGroup', 'FedEx', 'Ford','Google', 'Microsoft', 'Pepsi', 'Tesla' and 'Walmart' in vector stored parsed by Llama parser.
-- Can add more pdf to data folder, which will be converted to vector db using Llama parser.
+- Currently contains data of 10 orgs - 'Amazon','Apple','CitiGroup', 'FedEx', 'Ford','Google', 'Microsoft', 'Pepsi', 'Tesla' and 'Walmart' in vector store (vector folder) parsed by Llama parser. So no need to parse again and is ready to use.
+- Can add more pdf to data folder, which will be converted to vector db using Llama parser. Need to add the organization name to Supported_Orgs list in main.py.
 
 ## Tools Used ##
 - StreamLite : Used to create the chat web UI.
