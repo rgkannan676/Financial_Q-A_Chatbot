@@ -2,7 +2,7 @@ mkdir -p ~/.streamlit/
 
 echo "\
 [general]\n\
-email = \"rgkannan676@gmail.com\"\n\
+email = \"your_email@mail.com\"\n\
 " > ~/.streamlit/credentials.toml
 
 echo "\
