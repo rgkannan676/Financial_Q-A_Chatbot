@@ -21,3 +21,7 @@ The RAG (Retrieval-Augmented Generation) approach is used. Data source (PDF) is 
 - Install the modules in requirements.txt
 - Add api keys in .streamlit/secrets.toml
 - Start the Streamlit app by running 'Streamlit run main.py'
+
+## Examples ##
+![Alt text](example/ex_1.png?raw=true "ex_1")
+![Alt text](example/ex_2.png?raw=true "ex_2")
